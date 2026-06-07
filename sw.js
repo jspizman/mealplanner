@@ -1,5 +1,9 @@
-// Minimal offline cache. Bumps with CACHE version when files change.
-const CACHE = "mealplanner-v5";
+// Offline cache. Bumps with CACHE version when files change.
+// Strategy: NETWORK-FIRST for all same-origin app assets so HTML/CSS/JS always
+// update together as a matched set (prevents stale-cache skew, e.g. a new
+// planner.js running against an old config.js). Cache is used only as an offline
+// fallback and is refreshed on every successful fetch.
+const CACHE = "mealplanner-v6";
 const ASSETS = [
   "./", "./index.html", "./css/styles.css",
   "./js/app.js", "./js/ui.js", "./js/data.js", "./js/dropbox.js", "./js/config.js",
@@ -15,15 +19,21 @@ self.addEventListener("activate", (e) => {
     Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", (e) => {
+  if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  // Never cache Dropbox API calls.
+  // Never touch Dropbox API calls.
   if (url.hostname.endsWith("dropboxapi.com") || url.hostname.endsWith("dropbox.com")) return;
-  // Network-first for data and config so edits show up; cache-first for the rest of the shell.
-  if (url.pathname.endsWith("recipes.json") || url.pathname.endsWith("config.js")) {
-    e.respondWith(fetch(e.request).then((r) => {
-      const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return r;
-    }).catch(() => caches.match(e.request)));
-    return;
-  }
-  e.respondWith(caches.match(e.request).then((c) => c || fetch(e.request)));
+  // Only manage our own origin; let anything cross-origin pass straight through.
+  if (url.origin !== self.location.origin) return;
+
+  // Network-first: fetch fresh, update the cache, fall back to cache when offline.
+  e.respondWith(
+    fetch(e.request)
+      .then((r) => {
+        const copy = r.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        return r;
+      })
+      .catch(() => caches.match(e.request).then((c) => c || caches.match("./index.html")))
+  );
 });

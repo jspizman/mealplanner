@@ -130,9 +130,16 @@ function toast(msg, isErr) {
 }
 
 function registerSW() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
-  }
+  if (!("serviceWorker" in navigator)) return;
+  // When a new service worker takes control (after a deploy), reload once so the
+  // page picks up the fresh, matched set of assets instead of running a stale mix.
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
 boot();

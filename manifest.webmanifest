@@ -2,7 +2,7 @@
   "name": "Meal Planner",
   "short_name": "Meals",
   "description": "Family pescatarian meal planning — recipe library, weekly plans, and grocery lists.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f4f5f3",

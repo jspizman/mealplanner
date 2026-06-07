@@ -25,7 +25,9 @@ const UL_URL = "https://content.dropboxapi.com/2/files/upload";
 
 function redirectUri() {
   // Must exactly match a redirect URI registered in the Dropbox App Console.
-  return window.location.origin + window.location.pathname;
+  // Normalize to the directory URL (strip a trailing index.html) so the bare URL and the
+  // installed PWA (whose start_url may resolve to .../index.html) produce the SAME value.
+  return (window.location.origin + window.location.pathname).replace(/index\.html$/, "");
 }
 
 // ---- PKCE helpers ----

@@ -102,7 +102,9 @@ function stat(big, small) {
   return w;
 }
 
-export function openDetail(r) {
+// openDetail(r, actions?) — actions is an optional array of { label, className?, onClick(close) }
+// rendered as buttons under the subtitle (used by the planner for Swap / Remove).
+export function openDetail(r, actions) {
   const back = el("div", "mp-sheet-backdrop");
   const sheet = el("div", "mp-sheet");
   back.appendChild(sheet);
@@ -120,6 +122,16 @@ export function openDetail(r) {
   const sub = el("p", "mp-sheet-sub",
     `${r.cuisine} · ${r.mealType.map(cap).join(", ")} · serves ${r.baseServings} · ${data.totalTime(r)} min`);
   sheet.appendChild(sub);
+
+  if (actions && actions.length) {
+    const bar = el("div", "mp-sheet-actions");
+    actions.forEach((a) => {
+      const b = el("button", "mp-mini-btn" + (a.className ? " " + a.className : ""), a.label);
+      b.addEventListener("click", () => a.onClick(close));
+      bar.appendChild(b);
+    });
+    sheet.appendChild(bar);
+  }
 
   const m = r.macrosPerServing;
   const macros = el("div", "mp-sheet-macros");

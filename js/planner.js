@@ -3,9 +3,9 @@
 
 import { CONFIG } from "./config.js";
 import * as data from "./data.js";
+import * as ui from "./ui.js";
 
 const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x != null) n.textContent = x; return n; };
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const DAY_LABEL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 
 let _plan, _onChange, _container;
@@ -68,19 +68,30 @@ function kcalClass(k) {
 
 function slotRow(day, slot) {
   const row = el("div", "mp-slot");
-  row.appendChild(el("span", "mp-slot-label", cap(slot)));
-  const id = _plan.week[day][slot];
+  row.appendChild(el("span", "mp-slot-label" + (slot.kid ? " kid" : ""), slot.label));
+  const id = _plan.week[day][slot.key];
   const r = id ? data.byId(id) : null;
   const btn = el("button", "mp-slot-btn" + (r ? " filled" : ""));
   if (r) {
     btn.appendChild(el("span", "mp-slot-name", r.name));
     btn.appendChild(el("span", "mp-slot-kcal", `${r.macrosPerServing.calories} kcal`));
+    btn.addEventListener("click", () => openRecipe(day, slot, r)); // filled → view the recipe
   } else {
     btn.appendChild(el("span", "mp-slot-add", "+ Add"));
+    btn.addEventListener("click", () => openPicker(day, slot, null)); // empty → pick one
   }
-  btn.addEventListener("click", () => openPicker(day, slot, r));
   row.appendChild(btn);
   return row;
+}
+
+// Open the full recipe detail straight from the planner, with Swap / Remove actions.
+function openRecipe(day, slot, r) {
+  ui.openDetail(r, [
+    { label: "Swap recipe", onClick: (close) => { close(); openPicker(day, slot, r); } },
+    { label: "Remove from plan", className: "danger", onClick: (close) => {
+        _plan.week[day][slot.key] = null; persist(); close(); draw();
+      } },
+  ]);
 }
 
 function openPicker(day, slot, current) {
@@ -91,13 +102,13 @@ function openPicker(day, slot, current) {
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
 
   const head = el("div", "mp-sheet-head");
-  head.appendChild(el("h2", null, `${cap(slot)} · ${DAY_LABEL[day]}`));
+  head.appendChild(el("h2", null, `${slot.label} · ${DAY_LABEL[day]}`));
   const x = el("button", "mp-x", "✕"); x.addEventListener("click", close); head.appendChild(x);
   sheet.appendChild(head);
 
   if (current) {
     const rm = el("button", "mp-mini-btn danger", "Remove " + current.name);
-    rm.addEventListener("click", () => { _plan.week[day][slot] = null; persist(); close(); draw(); });
+    rm.addEventListener("click", () => { _plan.week[day][slot.key] = null; persist(); close(); draw(); });
     sheet.appendChild(rm);
   }
 
@@ -109,15 +120,16 @@ function openPicker(day, slot, current) {
 
   const renderList = () => {
     const q = search.value.trim();
-    // Default: recipes matching this slot's meal type; search overrides across everything.
-    let matches = q ? data.filter({ q }) : data.filter({ mealType: slot });
+    // Default: recipes matching this slot's meal type (and kid-friendly for the kids' slots);
+    // search overrides across everything.
+    let matches = q ? data.filter({ q }) : data.filter({ mealType: slot.mealType, kid: !!slot.kid });
     if (!q && matches.length === 0) matches = data.all();
     list.innerHTML = "";
     matches.slice(0, 60).forEach((rec) => {
       const item = el("button", "mp-picker-item");
       const m = rec.macrosPerServing;
       item.innerHTML = `<strong>${rec.name}</strong><span>${rec.cuisine} · ${m.calories} kcal · ${m.protein}g protein</span>`;
-      item.addEventListener("click", () => { _plan.week[day][slot] = rec.id; persist(); close(); draw(); });
+      item.addEventListener("click", () => { _plan.week[day][slot.key] = rec.id; persist(); close(); draw(); });
       list.appendChild(item);
     });
     if (!matches.length) list.appendChild(el("p", "mp-empty", "No matches."));

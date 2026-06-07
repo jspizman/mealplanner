@@ -51,7 +51,7 @@ export function emptyPlan() {
   const week = {};
   for (const d of CONFIG.DAYS) {
     week[d] = {};
-    for (const s of CONFIG.SLOTS) week[d][s] = null; // recipeId or null
+    for (const s of CONFIG.SLOTS) week[d][s.key] = null; // recipeId or null
   }
   return { familyServings: CONFIG.DEFAULT_FAMILY_SERVINGS, week };
 }
@@ -83,16 +83,28 @@ function normalizePlan(p) {
   const base = emptyPlan();
   base.familyServings = p.familyServings || CONFIG.DEFAULT_FAMILY_SERVINGS;
   for (const d of CONFIG.DAYS)
-    for (const s of CONFIG.SLOTS)
-      base.week[d][s] = (p.week?.[d]?.[s]) || null;
+    for (const s of CONFIG.SLOTS) {
+      let v = p.week?.[d]?.[s.key];
+      // Migrate plans saved before the snack split: the old single "snack" slot becomes Snack 1.
+      if (v == null && s.key === "snack1") v = p.week?.[d]?.snack;
+      base.week[d][s.key] = v || null;
+    }
   return base;
 }
 
-// Daily per-person calorie total (Josh's single serving of each slotted meal).
+// How many servings a slot scales to for grocery math.
+export function slotServings(slot, plan) {
+  if (slot.scale === "adults") return Math.max(1, plan.familyServings - CONFIG.KIDS_COUNT);
+  if (typeof slot.scale === "number") return slot.scale;
+  return plan.familyServings; // "family"
+}
+
+// Daily per-person calorie total (Josh's single serving of each meal that's his — kids' lunches excluded).
 export function dayCalories(plan, day) {
   let kcal = 0;
   for (const s of CONFIG.SLOTS) {
-    const r = byId(plan.week[day][s]);
+    if (s.kcal === false) continue;
+    const r = byId(plan.week[day][s.key]);
     if (r) kcal += r.macrosPerServing.calories;
   }
   return kcal;
@@ -104,9 +116,9 @@ export function aggregateGrocery(plan) {
   const staples = new Map(); // item -> aisle
   for (const d of CONFIG.DAYS) {
     for (const s of CONFIG.SLOTS) {
-      const r = byId(plan.week[d][s]);
+      const r = byId(plan.week[d][s.key]);
       if (!r) continue;
-      const scale = plan.familyServings / r.baseServings;
+      const scale = slotServings(s, plan) / r.baseServings;
       for (const ing of r.ingredients) {
         if (ing.optional) continue;
         if (ing.staple) { staples.set(ing.item, ing.aisle); continue; }

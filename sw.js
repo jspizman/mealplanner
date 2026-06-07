@@ -1,5 +1,5 @@
 // Minimal offline cache. Bumps with CACHE version when files change.
-const CACHE = "mealplanner-v4";
+const CACHE = "mealplanner-v5";
 const ASSETS = [
   "./", "./index.html", "./css/styles.css",
   "./js/app.js", "./js/ui.js", "./js/data.js", "./js/dropbox.js", "./js/config.js",

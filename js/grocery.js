@@ -24,7 +24,7 @@ export function renderGrocery(container, plan) {
   }
 
   const head = el("div", "mp-groc-head");
-  head.appendChild(el("p", "mp-groc-sum", `${agg.items.length} items for ${mealCount} planned meal${mealCount === 1 ? "" : "s"} · scaled to ${plan.familyServings} servings`));
+  head.appendChild(el("p", "mp-groc-sum", `${agg.items.length} items for ${mealCount} planned meal${mealCount === 1 ? "" : "s"} · scaled to your household`));
   const copyBtn = el("button", "mp-mini-btn primary", "Copy AnyList list");
   copyBtn.addEventListener("click", () => copyFlat(agg, copyBtn));
   head.appendChild(copyBtn);

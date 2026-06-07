@@ -77,6 +77,8 @@ body {
 .mp-sheet-head h2 { margin: 0; color: var(--navy); font-size: 21px; }
 .mp-x { border: 0; background: #f3f4f6; border-radius: 999px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; }
 .mp-sheet-sub { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
+.mp-sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+.mp-sheet-actions .mp-mini-btn.danger { margin-bottom: 0; }
 .mp-sheet-macros { display: flex; gap: 8px; flex-wrap: wrap; }
 .mp-sheet-macro { flex: 1 1 80px; background: var(--cream); border: 1px solid var(--line);
   border-radius: 10px; padding: 8px; text-align: center; }
@@ -116,6 +118,7 @@ body {
 
 .mp-slot { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
 .mp-slot-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.mp-slot-label.kid { color: var(--teal); }
 .mp-slot-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
   text-align: left; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 9px; padding: 9px 11px; cursor: pointer; font: inherit; min-height: 38px; }
 .mp-slot-btn.filled { background: #eef6f9; border-style: solid; border-color: #bfe0ea; }

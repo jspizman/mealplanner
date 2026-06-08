@@ -13,6 +13,11 @@ function fmtItem(x) {
   return q ? `${x.item}, ${q}` : x.item;
 }
 
+// Flat AnyList lines: structured items first, then free-text quick entries.
+function flatText(agg) {
+  return [...agg.items.map(fmtItem), ...agg.extras].join("\n");
+}
+
 export function renderGrocery(container, plan) {
   container.innerHTML = "";
   const agg = data.aggregateGrocery(plan);
@@ -24,7 +29,7 @@ export function renderGrocery(container, plan) {
   }
 
   const head = el("div", "mp-groc-head");
-  head.appendChild(el("p", "mp-groc-sum", `${agg.items.length} items for ${mealCount} planned meal${mealCount === 1 ? "" : "s"} · scaled to your household`));
+  head.appendChild(el("p", "mp-groc-sum", `${agg.items.length + agg.extras.length} items for ${mealCount} planned meal${mealCount === 1 ? "" : "s"} · scaled to your household`));
   const copyBtn = el("button", "mp-mini-btn primary", "Copy AnyList list");
   copyBtn.addEventListener("click", () => copyFlat(agg, copyBtn));
   head.appendChild(copyBtn);
@@ -33,9 +38,9 @@ export function renderGrocery(container, plan) {
   // View 1: flat AnyList export (in a textarea for easy manual copy too)
   const sect1 = section(container, "AnyList export", "Flat list — paste straight into AnyList, which sorts it into aisles for you.");
   const ta = el("textarea", "mp-groc-textarea");
-  ta.rows = Math.min(20, agg.items.length + 1);
+  ta.rows = Math.min(20, agg.items.length + agg.extras.length + 1);
   ta.readOnly = true;
-  ta.value = agg.items.map(fmtItem).join("\n");
+  ta.value = flatText(agg);
   sect1.appendChild(ta);
 
   // View 2: aisle-grouped review
@@ -50,6 +55,17 @@ export function renderGrocery(container, plan) {
       const li = el("li");
       const cb = el("input"); cb.type = "checkbox";
       const lab = el("label"); lab.appendChild(cb); lab.appendChild(el("span", null, " " + fmtItem(x)));
+      li.appendChild(lab); ul.appendChild(li);
+    });
+    sect2.appendChild(ul);
+  }
+  if (agg.extras.length) {
+    sect2.appendChild(el("h5", "mp-aisle-h", "Quick adds"));
+    const ul = el("ul", "mp-groc-list");
+    agg.extras.slice().sort((a, b) => a.localeCompare(b)).forEach((text) => {
+      const li = el("li");
+      const cb = el("input"); cb.type = "checkbox";
+      const lab = el("label"); lab.appendChild(cb); lab.appendChild(el("span", null, " " + text));
       li.appendChild(lab); ul.appendChild(li);
     });
     sect2.appendChild(ul);
@@ -82,7 +98,7 @@ function countMeals(plan) {
 }
 
 async function copyFlat(agg, btn) {
-  const text = agg.items.map(fmtItem).join("\n");
+  const text = flatText(agg);
   try {
     await navigator.clipboard.writeText(text);
     const old = btn.textContent; btn.textContent = "Copied ✓";

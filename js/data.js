@@ -44,6 +44,20 @@ async function fetchLocal() {
 
 export function byId(id) { return recipes.find((r) => r.id === id) || null; }
 
+// A planner slot holds null, a recipeId (string), or a free-text "quick entry" {text, kcal}.
+// resolveSlot normalizes any of those into a uniform shape the UI can render.
+export function resolveSlot(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const r = byId(value);
+    return r ? { kind: "recipe", recipe: r } : null; // dropped if the recipe no longer exists
+  }
+  if (typeof value === "object" && value.text) {
+    return { kind: "note", text: String(value.text), kcal: Number(value.kcal) || 0 };
+  }
+  return null;
+}
+
 // ---- Weekly plan (separate file: Dropbox /plan.json, or localStorage fallback) ----
 const LS_PLAN = "mp_plan";
 
@@ -100,12 +114,14 @@ export function slotServings(slot, plan) {
 }
 
 // Daily per-person calorie total (Josh's single serving of each meal that's his — kids' lunches excluded).
+// Quick entries contribute their optional kcal (0 if left blank).
 export function dayCalories(plan, day) {
   let kcal = 0;
   for (const s of CONFIG.SLOTS) {
     if (s.kcal === false) continue;
-    const r = byId(plan.week[day][s.key]);
-    if (r) kcal += r.macrosPerServing.calories;
+    const e = resolveSlot(plan.week[day][s.key]);
+    if (!e) continue;
+    kcal += e.kind === "recipe" ? e.recipe.macrosPerServing.calories : e.kcal;
   }
   return kcal;
 }
@@ -114,10 +130,13 @@ export function dayCalories(plan, day) {
 export function aggregateGrocery(plan) {
   const shop = new Map();   // key "item|unit" -> {item, unit, qty, aisle}
   const staples = new Map(); // item -> aisle
+  const extras = new Map();  // lowercased text -> original text (free-text quick entries, deduped)
   for (const d of CONFIG.DAYS) {
     for (const s of CONFIG.SLOTS) {
-      const r = byId(plan.week[d][s.key]);
-      if (!r) continue;
+      const e = resolveSlot(plan.week[d][s.key]);
+      if (!e) continue;
+      if (e.kind === "note") { extras.set(e.text.toLowerCase(), e.text); continue; }
+      const r = e.recipe;
       const scale = slotServings(s, plan) / r.baseServings;
       for (const ing of r.ingredients) {
         if (ing.optional) continue;
@@ -134,6 +153,7 @@ export function aggregateGrocery(plan) {
   return {
     items,
     staples: [...staples.entries()].map(([item, aisle]) => ({ item, aisle })),
+    extras: [...extras.values()],
   };
 }
 

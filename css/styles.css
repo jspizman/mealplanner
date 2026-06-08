@@ -119,6 +119,13 @@ body {
 .mp-slot { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; padding: 4px 0; }
 .mp-slot-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .mp-slot-label.kid { color: var(--teal); }
+.mp-slot-name.note { font-style: italic; color: #475569; }
+.mp-quickadd { margin: 4px 0 12px; }
+.mp-quickadd-label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.mp-quickadd-row { display: flex; gap: 8px; }
+.mp-quickadd-text { flex: 1; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font: inherit; }
+.mp-quickadd-kcal { width: 72px; padding: 9px 8px; border: 1px solid var(--line); border-radius: 9px; font: inherit; text-align: center; }
+.mp-or { text-align: center; color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
 .mp-slot-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
   text-align: left; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 9px; padding: 9px 11px; cursor: pointer; font: inherit; min-height: 38px; }
 .mp-slot-btn.filled { background: #eef6f9; border-style: solid; border-color: #bfe0ea; }

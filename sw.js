@@ -3,7 +3,7 @@
 // update together as a matched set (prevents stale-cache skew, e.g. a new
 // planner.js running against an old config.js). Cache is used only as an offline
 // fallback and is refreshed on every successful fetch.
-const CACHE = "mealplanner-v6";
+const CACHE = "mealplanner-v7";
 const ASSETS = [
   "./", "./index.html", "./css/styles.css",
   "./js/app.js", "./js/ui.js", "./js/data.js", "./js/dropbox.js", "./js/config.js",

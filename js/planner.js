@@ -69,13 +69,17 @@ function kcalClass(k) {
 function slotRow(day, slot) {
   const row = el("div", "mp-slot");
   row.appendChild(el("span", "mp-slot-label" + (slot.kid ? " kid" : ""), slot.label));
-  const id = _plan.week[day][slot.key];
-  const r = id ? data.byId(id) : null;
-  const btn = el("button", "mp-slot-btn" + (r ? " filled" : ""));
-  if (r) {
-    btn.appendChild(el("span", "mp-slot-name", r.name));
-    btn.appendChild(el("span", "mp-slot-kcal", `${r.macrosPerServing.calories} kcal`));
-    btn.addEventListener("click", () => openRecipe(day, slot, r)); // filled → view the recipe
+  const value = _plan.week[day][slot.key];
+  const e = data.resolveSlot(value);
+  const btn = el("button", "mp-slot-btn" + (e ? " filled" : ""));
+  if (e && e.kind === "recipe") {
+    btn.appendChild(el("span", "mp-slot-name", e.recipe.name));
+    btn.appendChild(el("span", "mp-slot-kcal", `${e.recipe.macrosPerServing.calories} kcal`));
+    btn.addEventListener("click", () => openRecipe(day, slot, e.recipe)); // recipe → view it
+  } else if (e && e.kind === "note") {
+    btn.appendChild(el("span", "mp-slot-name note", e.text));
+    btn.appendChild(el("span", "mp-slot-kcal", e.kcal ? `${e.kcal} kcal` : ""));
+    btn.addEventListener("click", () => openPicker(day, slot, value)); // quick entry → edit it
   } else {
     btn.appendChild(el("span", "mp-slot-add", "+ Add"));
     btn.addEventListener("click", () => openPicker(day, slot, null)); // empty → pick one
@@ -87,7 +91,7 @@ function slotRow(day, slot) {
 // Open the full recipe detail straight from the planner, with Swap / Remove actions.
 function openRecipe(day, slot, r) {
   ui.openDetail(r, [
-    { label: "Swap recipe", onClick: (close) => { close(); openPicker(day, slot, r); } },
+    { label: "Swap recipe", onClick: (close) => { close(); openPicker(day, slot, r.id); } },
     { label: "Remove from plan", className: "danger", onClick: (close) => {
         _plan.week[day][slot.key] = null; persist(); close(); draw();
       } },
@@ -106,11 +110,35 @@ function openPicker(day, slot, current) {
   const x = el("button", "mp-x", "✕"); x.addEventListener("click", close); head.appendChild(x);
   sheet.appendChild(head);
 
-  if (current) {
-    const rm = el("button", "mp-mini-btn danger", "Remove " + current.name);
+  const cur = data.resolveSlot(current);
+  if (cur) {
+    const label = cur.kind === "recipe" ? cur.recipe.name : cur.text;
+    const rm = el("button", "mp-mini-btn danger", "Remove " + label);
     rm.addEventListener("click", () => { _plan.week[day][slot.key] = null; persist(); close(); draw(); });
     sheet.appendChild(rm);
   }
+
+  // Quick entry: free text (e.g. "Fruit") with optional calories, no recipe needed.
+  const qa = el("div", "mp-quickadd");
+  qa.appendChild(el("label", "mp-quickadd-label", "Quick entry"));
+  const qaRow = el("div", "mp-quickadd-row");
+  const qText = el("input", "mp-quickadd-text"); qText.type = "text"; qText.placeholder = "e.g. Fruit, leftovers…";
+  const qKcal = el("input", "mp-quickadd-kcal"); qKcal.type = "number"; qKcal.min = "0"; qKcal.placeholder = "kcal";
+  const qBtn = el("button", "mp-mini-btn primary", "Add");
+  if (cur && cur.kind === "note") { qText.value = cur.text; if (cur.kcal) qKcal.value = String(cur.kcal); }
+  const addNote = () => {
+    const text = qText.value.trim();
+    if (!text) { qText.focus(); return; }
+    _plan.week[day][slot.key] = { text, kcal: Math.max(0, Number(qKcal.value) || 0) };
+    persist(); close(); draw();
+  };
+  qBtn.addEventListener("click", addNote);
+  [qText, qKcal].forEach((i) => i.addEventListener("keydown", (ev) => { if (ev.key === "Enter") addNote(); }));
+  qaRow.appendChild(qText); qaRow.appendChild(qKcal); qaRow.appendChild(qBtn);
+  qa.appendChild(qaRow);
+  sheet.appendChild(qa);
+
+  sheet.appendChild(el("p", "mp-or", "or pick a recipe"));
 
   const search = el("input", "mp-search"); search.type = "search"; search.placeholder = "Search recipes…";
   sheet.appendChild(search);

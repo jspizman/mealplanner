@@ -58,7 +58,7 @@ function draw() {
     tot.title = "Your per-person total for the day (target ~" + CONFIG.DAILY_KCAL_TARGET + ")";
     right.appendChild(tot);
     const copy = el("button", "mp-day-copy", "Copy");
-    copy.title = "Copy this day's meals + calories for Noom logging";
+    copy.title = "Copy this day's recipes + single-serving ingredients for Noom logging";
     copy.addEventListener("click", () => copyDay(day, copy));
     right.appendChild(copy);
     head.appendChild(right);
@@ -118,26 +118,55 @@ function switchWeek(key) {
   draw();
 }
 
-// ---- Copy day for Noom: the day's calorie-counting meals + per-meal kcal as text ----
+// ---- Copy day for Noom: each recipe with its ingredients scaled to ONE serving ----
+// Noom is logged food-by-food, so the export lists every ingredient at Josh's single
+// portion (recipe qty ÷ baseServings) under each recipe, not just the recipe name.
 function dayDateLabel(day) {
   const [y, m, d] = _plan.weekKey.split("-").map(Number);
   const dt = new Date(y, m - 1, d + CONFIG.DAYS.indexOf(day));
   return dt.toLocaleString("en-US", { month: "short", day: "numeric" });
 }
 
+// Format a scaled ingredient amount as a tidy cooking quantity (snapped to common fractions).
+function fmtAmt(q) {
+  if (q == null) return "";
+  if (q >= 10) return String(Math.round(q));
+  const whole = Math.floor(q);
+  const opts = [0, 0.25, 0.33, 0.5, 0.67, 0.75, 1];
+  let best = 0, bd = 1;
+  for (const o of opts) { const dd = Math.abs((q - whole) - o); if (dd < bd) { bd = dd; best = o; } }
+  let w = whole, f = best;
+  if (f === 1) { w += 1; f = 0; }
+  if (w === 0 && f === 0) return String(Math.round(q * 100) / 100); // tiny qty: don't vanish to 0
+  const frac = { 0: "", 0.25: "¼", 0.33: "⅓", 0.5: "½", 0.67: "⅔", 0.75: "¾" }[f];
+  return (w ? String(w) : "") + (frac ? (w ? " " : "") + frac : "");
+}
+
+function ingLine(ing, scale) {
+  const q = ing.qty != null ? ing.qty * scale : null;
+  const head = [fmtAmt(q), q != null ? ing.unit : ""].filter(Boolean).join(" ");
+  const prep = ing.prep ? `, ${ing.prep}` : "";
+  return `  - ${head ? head + " " : ""}${ing.item}${prep}${ing.optional ? " (optional)" : ""}`;
+}
+
 function dayNoomText(day) {
-  const lines = [];
+  const blocks = [];
   for (const slot of CONFIG.SLOTS) {
     if (slot.kcal === false) continue; // kids' lunches don't count toward Josh's intake
     const e = data.resolveSlot(_plan.week[day][slot.key]);
     if (!e) continue;
-    const name = e.kind === "recipe" ? e.recipe.name : e.text;
-    const kcal = e.kind === "recipe" ? e.recipe.macrosPerServing.calories : e.kcal;
-    lines.push(`• ${slot.label}: ${name}${kcal ? ` — ${kcal} kcal` : ""}`);
+    if (e.kind === "recipe") {
+      const r = e.recipe;
+      const scale = 1 / r.baseServings; // ingredients for a single serving
+      const lines = r.ingredients.map((ing) => ingLine(ing, scale));
+      blocks.push(`${slot.label}: ${r.name} — ${r.macrosPerServing.calories} kcal (1 serving)\n${lines.join("\n")}`);
+    } else {
+      blocks.push(`${slot.label}: ${e.text}${e.kcal ? ` — ${e.kcal} kcal` : ""}`);
+    }
   }
-  if (!lines.length) return null;
+  if (!blocks.length) return null;
   const header = `${DAY_LABEL[day]} (${dayDateLabel(day)}) — ${data.dayCalories(_plan, day)} kcal`;
-  return [header, ...lines].join("\n");
+  return header + "\n\n" + blocks.join("\n\n");
 }
 
 async function copyDay(day, btn) {

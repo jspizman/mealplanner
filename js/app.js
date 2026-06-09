@@ -8,7 +8,6 @@ import { renderPlanner } from "./planner.js";
 import { renderGrocery } from "./grocery.js";
 
 const $ = (id) => document.getElementById(id);
-let plan = null;
 
 async function boot() {
   $("app-name").textContent = CONFIG.APP_NAME;
@@ -30,7 +29,7 @@ async function boot() {
     return;
   }
 
-  plan = await data.loadPlan();
+  await data.loadPlan();
 
   if (data.all().length === 0) {
     showEmptyLibrary();
@@ -70,13 +69,12 @@ function showView(view, tab) {
   tab.classList.add("active");
   document.querySelectorAll(".mp-view").forEach((v) => (v.hidden = true));
   $("view-" + view).hidden = false;
-  if (view === "planner") renderPlanner($("view-planner"), plan, onPlanChange);
-  if (view === "grocery") renderGrocery($("view-grocery"), plan);
+  if (view === "planner") renderPlanner($("view-planner"), data.activePlan(), onPlanChange);
+  if (view === "grocery") renderGrocery($("view-grocery"), data.activePlan());
 }
 
 async function onPlanChange(updated) {
-  plan = updated;
-  const where = await data.savePlan(plan);
+  const where = await data.savePlan(updated);
   if (where === "dropbox") toast("Plan saved to Dropbox");
 }
 

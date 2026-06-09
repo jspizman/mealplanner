@@ -36,20 +36,32 @@ function draw() {
 
   const clearBtn = el("button", "mp-mini-btn", "Clear week");
   clearBtn.addEventListener("click", () => {
-    if (confirm("Clear all meals from this week?")) { _plan = data.emptyPlan(); _plan.familyServings = Number(input.value) || CONFIG.DEFAULT_FAMILY_SERVINGS; persist(); draw(); }
+    if (confirm("Clear all meals from this week?")) {
+      _plan = data.clearActiveWeek();
+      _plan.familyServings = Number(input.value) || CONFIG.DEFAULT_FAMILY_SERVINGS;
+      persist(); draw();
+    }
   });
   controls.appendChild(clearBtn);
   _container.appendChild(controls);
+
+  _container.appendChild(weekNav());
 
   // Day cards
   for (const day of CONFIG.DAYS) {
     const card = el("div", "mp-day");
     const head = el("div", "mp-day-head");
     head.appendChild(el("h3", null, DAY_LABEL[day]));
+    const right = el("div", "mp-day-actions");
     const kcal = data.dayCalories(_plan, day);
     const tot = el("span", "mp-day-kcal " + kcalClass(kcal), kcal ? `${kcal} kcal` : "—");
     tot.title = "Your per-person total for the day (target ~" + CONFIG.DAILY_KCAL_TARGET + ")";
-    head.appendChild(tot);
+    right.appendChild(tot);
+    const copy = el("button", "mp-day-copy", "Copy");
+    copy.title = "Copy this day's meals + calories for Noom logging";
+    copy.addEventListener("click", () => copyDay(day, copy));
+    right.appendChild(copy);
+    head.appendChild(right);
     card.appendChild(head);
 
     for (const slot of CONFIG.SLOTS) {
@@ -64,6 +76,85 @@ function kcalClass(k) {
   if (k >= 1450 && k <= 1650) return "good";
   if (k > 1800) return "high";
   return "warn";
+}
+
+// ---- Week switcher: step between forward/back weeks (stored keyed by week-start) ----
+function weekNav() {
+  const nav = el("div", "mp-weeknav");
+
+  const prev = el("button", "mp-week-arrow", "‹");
+  prev.title = "Previous week";
+  prev.addEventListener("click", () => switchWeek(data.shiftWeekKey(_plan.weekKey, -1)));
+  nav.appendChild(prev);
+
+  const label = el("div", "mp-week-label");
+  label.appendChild(el("strong", null, relWeekLabel(data.weekOffset(_plan.weekKey))));
+  label.appendChild(el("span", null, data.weekLabel(_plan.weekKey)));
+  nav.appendChild(label);
+
+  const next = el("button", "mp-week-arrow", "›");
+  next.title = "Next week";
+  next.addEventListener("click", () => switchWeek(data.shiftWeekKey(_plan.weekKey, 1)));
+  nav.appendChild(next);
+
+  if (data.weekOffset(_plan.weekKey) !== 0) {
+    const today = el("button", "mp-mini-btn mp-week-today", "This week");
+    today.addEventListener("click", () => switchWeek(data.weekStartKey()));
+    nav.appendChild(today);
+  }
+  return nav;
+}
+
+function relWeekLabel(off) {
+  if (off === 0) return "This week";
+  if (off === 1) return "Next week";
+  if (off === -1) return "Last week";
+  if (off > 1) return `In ${off} weeks`;
+  return `${-off} weeks ago`;
+}
+
+function switchWeek(key) {
+  _plan = data.setActiveWeek(key); // viewing only — no save until the week is edited
+  draw();
+}
+
+// ---- Copy day for Noom: the day's calorie-counting meals + per-meal kcal as text ----
+function dayDateLabel(day) {
+  const [y, m, d] = _plan.weekKey.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + CONFIG.DAYS.indexOf(day));
+  return dt.toLocaleString("en-US", { month: "short", day: "numeric" });
+}
+
+function dayNoomText(day) {
+  const lines = [];
+  for (const slot of CONFIG.SLOTS) {
+    if (slot.kcal === false) continue; // kids' lunches don't count toward Josh's intake
+    const e = data.resolveSlot(_plan.week[day][slot.key]);
+    if (!e) continue;
+    const name = e.kind === "recipe" ? e.recipe.name : e.text;
+    const kcal = e.kind === "recipe" ? e.recipe.macrosPerServing.calories : e.kcal;
+    lines.push(`• ${slot.label}: ${name}${kcal ? ` — ${kcal} kcal` : ""}`);
+  }
+  if (!lines.length) return null;
+  const header = `${DAY_LABEL[day]} (${dayDateLabel(day)}) — ${data.dayCalories(_plan, day)} kcal`;
+  return [header, ...lines].join("\n");
+}
+
+async function copyDay(day, btn) {
+  const text = dayNoomText(day);
+  if (!text) { flash(btn, "Empty"); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    flash(btn, "Copied ✓");
+  } catch {
+    flash(btn, "Ctrl+C");
+  }
+}
+
+function flash(btn, msg) {
+  const old = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => (btn.textContent = old), 1500);
 }
 
 function slotRow(day, slot) {

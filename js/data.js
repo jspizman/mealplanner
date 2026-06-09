@@ -58,52 +58,141 @@ export function resolveSlot(value) {
   return null;
 }
 
-// ---- Weekly plan (separate file: Dropbox /plan.json, or localStorage fallback) ----
+// ---- Weekly plans (separate file: Dropbox /plan.json, or localStorage fallback) ----
+// Storage shape (v2): { familyServings, weeks: { "YYYY-MM-DD": weekObj } }, each week
+// keyed by the Monday of that week. v1 files held a single { familyServings, week }; those
+// migrate into the current week's slot on load. familyServings is shared across all weeks.
 const LS_PLAN = "mp_plan";
 
-export function emptyPlan() {
+let planStore = null;     // { familyServings, weeks }
+let activeWeekKey = null; // "YYYY-MM-DD" Monday of the week currently being viewed
+
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dateOfKey(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+// Monday (ISO week start) of the week containing `date`, as a YYYY-MM-DD key.
+export function weekStartKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // 0 = Monday
+  return isoDate(d);
+}
+export function shiftWeekKey(key, deltaWeeks) {
+  const d = dateOfKey(key);
+  d.setDate(d.getDate() + deltaWeeks * 7);
+  return isoDate(d);
+}
+// "Jun 8–14" / "Jun 29 – Jul 5" date-range label for a week key.
+export function weekLabel(key) {
+  const start = dateOfKey(key);
+  const end = dateOfKey(key); end.setDate(end.getDate() + 6);
+  const mo = (x) => x.toLocaleString("en-US", { month: "short" });
+  return start.getMonth() === end.getMonth()
+    ? `${mo(start)} ${start.getDate()}–${end.getDate()}`
+    : `${mo(start)} ${start.getDate()} – ${mo(end)} ${end.getDate()}`;
+}
+// How many weeks `key` is from the current week (0 = this week, 1 = next, -1 = last).
+export function weekOffset(key) {
+  return Math.round((dateOfKey(key) - dateOfKey(weekStartKey())) / (7 * 86400000));
+}
+
+function emptyWeek() {
   const week = {};
   for (const d of CONFIG.DAYS) {
     week[d] = {};
-    for (const s of CONFIG.SLOTS) week[d][s.key] = null; // recipeId or null
+    for (const s of CONFIG.SLOTS) week[d][s.key] = null; // recipeId, {text,kcal}, or null
   }
-  return { familyServings: CONFIG.DEFAULT_FAMILY_SERVINGS, week };
+  return week;
+}
+export function emptyPlan() {
+  return { familyServings: CONFIG.DEFAULT_FAMILY_SERVINGS, week: emptyWeek() };
+}
+
+// The active week as a single-week plan object the planner/grocery views consume.
+// `week` is a live reference into the store, so slot edits mutate the store directly.
+export function activePlan() {
+  return { familyServings: planStore.familyServings, week: planStore.weeks[activeWeekKey], weekKey: activeWeekKey };
+}
+export function getActiveWeekKey() { return activeWeekKey; }
+
+export function setActiveWeek(key) {
+  if (!planStore.weeks[key]) planStore.weeks[key] = emptyWeek();
+  activeWeekKey = key;
+  return activePlan();
+}
+export function clearActiveWeek() {
+  planStore.weeks[activeWeekKey] = emptyWeek();
+  return activePlan();
 }
 
 export async function loadPlan() {
+  let stored = null;
   if (dbx.isConfigured() && dbx.isConnected()) {
     try {
       const p = await dbx.downloadJson(CONFIG.DROPBOX_PLAN_PATH);
-      if (p && p.week) return normalizePlan(p);
+      if (p && typeof p === "object") stored = p;
     } catch (e) { console.warn("Plan load (Dropbox) failed:", e); }
   }
-  try {
-    const raw = localStorage.getItem(LS_PLAN);
-    if (raw) return normalizePlan(JSON.parse(raw));
-  } catch {}
-  return emptyPlan();
+  if (!stored) {
+    try {
+      const raw = localStorage.getItem(LS_PLAN);
+      if (raw) stored = JSON.parse(raw);
+    } catch {}
+  }
+  planStore = normalizeStore(stored);
+  activeWeekKey = weekStartKey(); // always open on the current week
+  if (!planStore.weeks[activeWeekKey]) planStore.weeks[activeWeekKey] = emptyWeek();
+  return activePlan();
+}
+
+function weekIsEmpty(week) {
+  for (const d of CONFIG.DAYS) for (const s of CONFIG.SLOTS) if (week?.[d]?.[s.key]) return false;
+  return true;
 }
 
 export async function savePlan(plan) {
-  localStorage.setItem(LS_PLAN, JSON.stringify(plan)); // always keep a local copy
+  // Fold the active-week view back into the store, then persist the whole store.
+  if (plan) {
+    if (plan.familyServings) planStore.familyServings = plan.familyServings;
+    if (plan.week) planStore.weeks[activeWeekKey] = plan.week;
+  }
+  // Drop empty weeks (except the one in view) so merely browsing ahead doesn't bloat the file.
+  for (const k of Object.keys(planStore.weeks))
+    if (k !== activeWeekKey && weekIsEmpty(planStore.weeks[k])) delete planStore.weeks[k];
+  localStorage.setItem(LS_PLAN, JSON.stringify(planStore)); // always keep a local copy
   if (dbx.isConfigured() && dbx.isConnected()) {
-    try { await dbx.uploadJson(plan, CONFIG.DROPBOX_PLAN_PATH); return "dropbox"; }
+    try { await dbx.uploadJson(planStore, CONFIG.DROPBOX_PLAN_PATH); return "dropbox"; }
     catch (e) { console.warn("Plan save (Dropbox) failed:", e); }
   }
   return "local";
 }
 
-function normalizePlan(p) {
-  const base = emptyPlan();
-  base.familyServings = p.familyServings || CONFIG.DEFAULT_FAMILY_SERVINGS;
+function normalizeStore(p) {
+  const store = { familyServings: CONFIG.DEFAULT_FAMILY_SERVINGS, weeks: {} };
+  if (p && typeof p === "object") {
+    store.familyServings = p.familyServings || CONFIG.DEFAULT_FAMILY_SERVINGS;
+    if (p.weeks && typeof p.weeks === "object") {
+      for (const [k, w] of Object.entries(p.weeks)) store.weeks[k] = normalizeWeek(w);
+    } else if (p.week) {
+      store.weeks[weekStartKey()] = normalizeWeek(p.week); // migrate v1 single week
+    }
+  }
+  return store;
+}
+
+function normalizeWeek(w) {
+  const week = emptyWeek();
   for (const d of CONFIG.DAYS)
     for (const s of CONFIG.SLOTS) {
-      let v = p.week?.[d]?.[s.key];
+      let v = w?.[d]?.[s.key];
       // Migrate plans saved before the snack split: the old single "snack" slot becomes Snack 1.
-      if (v == null && s.key === "snack1") v = p.week?.[d]?.snack;
-      base.week[d][s.key] = v || null;
+      if (v == null && s.key === "snack1") v = w?.[d]?.snack;
+      week[d][s.key] = v || null;
     }
-  return base;
+  return week;
 }
 
 // How many servings a slot scales to for grocery math.

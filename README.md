@@ -5,7 +5,7 @@ Vanilla JS, **no build step** — it's just static files, so it hosts free on Gi
 and is trivial to maintain. Data lives in one `recipes.json`, synced via your Dropbox.
 
 ## Run it locally
-From the project root (`50_mealplanning/`):
+From the project root (`30_personal/mealplanning/`):
 ```
 python -m http.server 8766 --directory 03_app
 ```
